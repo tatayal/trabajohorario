@@ -1,0 +1,748 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+    <meta name="theme-color" content="#0f172a">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <title>ControlAsistencia Pro — Reloj Checador Laboral</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        html, body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: #f8fafc;
+            overflow-x: hidden;
+            max-width: 100vw;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .tabular-nums { font-variant-numeric: tabular-nums; }
+        button, select, input { touch-action: manipulation; }
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(1rem); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-slide-up { animation: slideUp 0.25s ease-out forwards; }
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after {
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.01ms !important;
+            }
+        }
+    </style>
+</head>
+<body class="text-slate-800 min-h-screen flex flex-col justify-between selection:bg-slate-800 selection:text-white overflow-x-hidden">
+
+    <!-- Indicador de conexión Firebase -->
+    <div id="firebase-status" class="bg-amber-600 text-white text-[11px] font-medium text-center py-1 px-2">
+        Conectando con Firebase Realtime Database...
+    </div>
+
+    <header class="bg-slate-900 text-white border-b border-slate-800 sticky top-0 z-30 shadow-md">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-14 sm:h-16 flex items-center justify-between gap-2">
+            <div class="flex items-center space-x-2.5 min-w-0">
+                <div class="bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 p-1.5 sm:p-2 rounded-xl shrink-0">
+                    <svg aria-hidden="true" class="w-5 h-5 sm:w-6 sm:h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <polyline points="12 6 12 12 16 14"></polyline>
+                    </svg>
+                </div>
+                <div class="truncate">
+                    <h1 class="font-bold text-base sm:text-lg tracking-tight leading-none truncate">
+                        ControlAsistencia <span class="text-emerald-400">Pro</span>
+                    </h1>
+                    <p class="text-[11px] text-slate-400 mt-0.5 truncate">Terminal de Fichaje en Vivo (Cloud)</p>
+                </div>
+            </div>
+
+            <div class="flex items-center space-x-2 shrink-0">
+                <button type="button" onclick="abrirModalPuntualidad()" class="min-h-[38px] px-2.5 sm:px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-[0.98] text-xs font-semibold text-amber-300 border border-slate-700 inline-flex items-center gap-1.5 transition-all">
+                    <svg aria-hidden="true" class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                        <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                    </svg>
+                    <span>Puntualidad</span>
+                    <span id="header-regla-puntualidad" class="hidden md:inline text-[11px] font-mono text-slate-300 bg-slate-900/80 px-1.5 py-0.5 rounded">09:00 +5m</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8 flex-grow w-full">
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-5 lg:gap-8">
+
+            <div class="lg:col-span-5 space-y-5">
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                    <div class="bg-slate-900 text-white px-4 py-5 sm:p-6 text-center relative">
+                        <p id="fecha-actual" class="text-[11px] sm:text-xs font-medium uppercase tracking-widest text-slate-400 mb-1">Cargando fecha...</p>
+                        <div id="reloj-digital" class="text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight tabular-nums text-white my-1.5">00:00:00</div>
+                        <div class="mt-3.5 flex flex-col items-center justify-center">
+                            <span id="badge-estado" class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-semibold bg-slate-800 text-slate-300 border border-slate-700">
+                                <span id="dot-estado" class="w-2.5 h-2.5 rounded-full bg-slate-400"></span>
+                                <span id="texto-estado">Fuera de turno</span>
+                            </span>
+                        </div>
+                    </div>
+
+                    <div class="bg-slate-50 px-4 sm:px-6 py-3.5 border-b border-slate-200">
+                        <p class="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-slate-500">Jornada Activa (Hoy)</p>
+                        <p id="cronometro-jornada" class="text-lg sm:text-xl font-bold text-slate-800 tabular-nums mt-0.5">00h 00m 00s</p>
+                    </div>
+
+                    <div class="p-4 sm:p-6 space-y-4">
+                        <div>
+                            <div class="flex flex-wrap items-center justify-between mb-1.5 gap-2">
+                                <label for="select-empleado" class="block text-xs font-semibold uppercase tracking-wider text-slate-600">Empleado</label>
+                                <div class="flex items-center gap-1.5">
+                                    <button type="button" onclick="abrirModalEmpleado()" class="min-h-[36px] px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-emerald-50 text-xs font-semibold text-slate-700 hover:text-emerald-700 inline-flex items-center gap-1.5 transition-colors">+ Nuevo</button>
+                                    <button type="button" onclick="abrirModalGestionEmpleados()" class="min-h-[36px] px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-rose-50 text-xs font-semibold text-slate-700 hover:text-rose-700 inline-flex items-center gap-1.5 transition-colors">Gestionar</button>
+                                </div>
+                            </div>
+                            <div id="contenedor-select-empleado" class="relative">
+                                <select id="select-empleado" onchange="cambiarEmpleadoActivo()" class="w-full min-h-[48px] appearance-none bg-slate-50 border border-slate-300 text-slate-800 text-base font-medium rounded-xl px-4 py-2.5 pr-10 focus:outline-none focus:ring-2 focus:ring-slate-800"></select>
+                                <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3.5 text-slate-500">
+                                    <svg aria-hidden="true" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                                </div>
+                            </div>
+                            <div id="aviso-sin-empleados" class="hidden mt-2 p-3.5 rounded-xl bg-amber-50 border border-amber-200 flex items-center justify-between gap-3">
+                                <div class="text-xs text-amber-900">
+                                    <p class="font-bold">No hay empleados registrados</p>
+                                    <p class="text-amber-700 mt-0.5">Agregue un primer empleado para comenzar.</p>
+                                </div>
+                                <button type="button" onclick="abrirModalEmpleado()" class="min-h-[40px] px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold">+ Agregar</button>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label for="input-notas" class="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1.5">Observaciones / Notas</label>
+                            <input type="text" id="input-notas" placeholder="Ej. Trabajo remoto, Reunión..." maxlength="80" class="w-full min-h-[48px] bg-slate-50 border border-slate-300 text-slate-800 text-base rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-slate-800">
+                        </div>
+
+                        <div class="pt-1 space-y-2.5">
+                            <p class="text-xs font-semibold uppercase tracking-wider text-slate-500">Acciones de Fichaje</p>
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <button id="btn-entrada" onclick="registrarMarca('Entrada')" class="min-h-[56px] flex items-center justify-center gap-2.5 py-3.5 px-4 rounded-xl font-bold text-base text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 transition-all shadow-sm">
+                                    <span id="texto-btn-entrada">Registrar Entrada</span>
+                                </button>
+                                <button id="btn-salida" onclick="registrarMarca('Salida')" class="min-h-[56px] flex items-center justify-center gap-2 py-3 px-3.5 rounded-xl font-bold text-base text-white bg-rose-600 hover:bg-rose-700 disabled:opacity-40 transition-all shadow-sm">Registrar Salida</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="lg:col-span-7 space-y-5 flex flex-col">
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div class="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between">
+                        <p class="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Entradas Hoy</p>
+                        <p id="resumen-entradas-hoy" class="text-2xl font-extrabold text-slate-900 tabular-nums mt-2">0</p>
+                        <p id="resumen-empleado-estado-texto" class="text-[11px] text-slate-400 mt-0.5 truncate">Sin ingreso hoy</p>
+                    </div>
+                    <div class="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between">
+                        <p class="text-[11px] font-semibold uppercase tracking-wider text-slate-500">A Tiempo</p>
+                        <p id="resumen-atiempo-hoy" class="text-2xl font-extrabold text-emerald-600 tabular-nums mt-2">0</p>
+                        <p id="resumen-puntualidad-empleado" class="text-[11px] text-slate-500 font-medium mt-0.5 truncate">Empleado: Sin ingreso</p>
+                    </div>
+                    <div class="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between">
+                        <p class="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Atrasos</p>
+                        <p id="resumen-atrasos-hoy" class="text-2xl font-extrabold text-rose-600 tabular-nums mt-2">0</p>
+                        <button type="button" onclick="abrirModalPuntualidad()" class="text-left text-[11px] text-amber-700 hover:underline font-semibold mt-0.5 truncate">Regla: <span id="resumen-regla-activa">09:00 (+5m)</span></button>
+                    </div>
+                    <div class="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between">
+                        <p class="text-[11px] font-semibold uppercase tracking-wider text-slate-500">En Turno</p>
+                        <p id="resumen-activos-ahora" class="text-2xl font-extrabold text-sky-600 tabular-nums mt-2">0</p>
+                        <p id="resumen-total-plantilla" class="text-[11px] text-slate-400 mt-0.5 truncate">De 0 registrados</p>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 flex-grow flex flex-col overflow-hidden">
+                    <div class="p-4 sm:p-5 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <h2 class="font-bold text-slate-900 text-base">Historial de Asistencia (Cloud)</h2>
+                        <div class="flex flex-wrap items-center gap-2">
+                            <button onclick="exportarCSV()" class="min-h-[42px] px-3.5 py-2 rounded-xl text-xs font-semibold bg-slate-900 text-white transition-all">Descargar CSV</button>
+                            <button onclick="copiarCSVPortapapeles()" class="min-h-[42px] px-3 py-2 rounded-xl text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-300">Copiar CSV</button>
+                            <button onclick="abrirModalConfirmacion()" class="min-h-[42px] px-3 py-2 rounded-xl text-xs font-semibold bg-rose-50 text-rose-600 border border-rose-200">Limpiar</button>
+                        </div>
+                    </div>
+
+                    <div class="bg-slate-50 px-4 sm:px-5 py-3.5 border-b border-slate-200 grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                        <select id="filtro-empleado" onchange="renderizarHistorial()" class="w-full min-h-[44px] bg-white border border-slate-300 text-slate-700 text-base sm:text-xs font-medium rounded-xl px-3 py-2">
+                            <option value="TODOS">Todos los empleados</option>
+                        </select>
+                        <input type="date" id="filtro-fecha" onchange="renderizarHistorial()" class="w-full min-h-[44px] bg-white border border-slate-300 text-slate-700 text-base sm:text-xs font-medium rounded-xl px-3 py-2">
+                        <button onclick="limpiarFiltros()" class="w-full min-h-[44px] bg-white text-slate-700 border border-slate-300 text-xs font-semibold py-2 px-3 rounded-xl">Mostrar todos</button>
+                    </div>
+
+                    <div id="lista-tarjetas-movil" class="sm:hidden divide-y divide-slate-200"></div>
+
+                    <div class="hidden sm:block overflow-x-auto flex-grow">
+                        <table class="w-full text-left border-collapse">
+                            <thead>
+                                <tr class="bg-slate-50/80 border-b border-slate-200 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                                    <th class="py-3 px-4">Fecha</th>
+                                    <th class="py-3 px-4">Empleado</th>
+                                    <th class="py-3 px-4">Tipo</th>
+                                    <th class="py-3 px-4">Hora / Estado</th>
+                                    <th class="py-3 px-4">Notas</th>
+                                    <th class="py-3 px-4 text-right">Duración</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tbody-historial" class="divide-y divide-slate-100 text-xs sm:text-sm"></tbody>
+                        </table>
+                    </div>
+
+                    <div id="estado-vacio" class="hidden py-12 px-4 text-center">
+                        <p class="text-sm font-semibold text-slate-700">No se encontraron registros</p>
+                    </div>
+
+                    <div class="px-4 sm:px-5 py-3 bg-slate-50 border-t border-slate-200 text-xs text-slate-500">
+                        <span id="contador-registros">0 registros mostrados</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Modal Empleado -->
+    <div id="modal-empleado" role="dialog" aria-modal="true" aria-labelledby="titulo-modal-empleado" class="fixed inset-0 z-50 hidden bg-slate-900/60 flex items-end sm:items-center justify-center p-0 sm:p-4">
+        <div class="bg-white rounded-t-3xl sm:rounded-2xl max-w-md w-full p-6 shadow-xl border border-slate-200 animate-slide-up">
+            <h3 id="titulo-modal-empleado" class="text-base font-bold text-slate-900 mb-4">Registrar Nuevo Empleado</h3>
+            <form onsubmit="guardarNuevoEmpleado(event)" class="space-y-4">
+                <div>
+                    <label for="nuevo-emp-nombre" class="block text-xs font-semibold uppercase text-slate-600 mb-1.5">Nombre Completo</label>
+                    <input type="text" id="nuevo-emp-nombre" required minlength="2" maxlength="60" class="w-full min-h-[48px] bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-base">
+                </div>
+                <div>
+                    <label for="nuevo-emp-id" class="block text-xs font-semibold uppercase text-slate-600 mb-1.5">ID / Código</label>
+                    <input type="text" id="nuevo-emp-id" required pattern="[A-Za-z0-9_\-]{2,20}" title="2 a 20 caracteres: letras, números, guion o guion bajo" class="w-full min-h-[48px] bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-base">
+                </div>
+                <div class="flex justify-end gap-2.5 pt-2">
+                    <button type="button" onclick="cerrarModalEmpleado()" class="px-4 py-2.5 text-sm font-semibold text-slate-600">Cancelar</button>
+                    <button type="submit" class="px-5 py-2.5 text-sm font-semibold bg-emerald-600 text-white rounded-xl">Guardar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Puntualidad -->
+    <div id="modal-puntualidad" role="dialog" aria-modal="true" aria-labelledby="titulo-modal-puntualidad" class="fixed inset-0 z-50 hidden bg-slate-900/60 flex items-end sm:items-center justify-center p-0 sm:p-4">
+        <div class="bg-white rounded-t-3xl sm:rounded-2xl max-w-md w-full p-6 shadow-xl border border-slate-200 animate-slide-up">
+            <h3 id="titulo-modal-puntualidad" class="text-base font-bold text-slate-900 mb-4">Configurar Puntualidad</h3>
+
+            <form id="form-verificar-clave" onsubmit="verificarClavePuntualidad(event)" class="space-y-4">
+                <p class="text-xs text-slate-600">Ingrese la clave de administrador para continuar.</p>
+                <input type="password" id="input-clave-admin" required class="w-full min-h-[48px] bg-slate-50 border border-slate-300 rounded-xl px-4 text-base">
+                <p id="error-clave-admin" class="hidden text-xs text-rose-600">Clave incorrecta.</p>
+                <div class="flex justify-end gap-2.5">
+                    <button type="button" onclick="cerrarModalPuntualidad()" class="px-4 py-2.5 text-sm text-slate-600">Cancelar</button>
+                    <button type="submit" class="px-5 py-2.5 text-sm bg-slate-900 text-white rounded-xl">Desbloquear</button>
+                </div>
+            </form>
+
+            <form id="form-config-puntualidad" onsubmit="guardarConfigPuntualidad(event)" class="hidden space-y-4">
+                <div>
+                    <label for="config-hora-esperada" class="block text-xs font-semibold uppercase text-slate-600 mb-1">Hora Entrada Esperada</label>
+                    <input type="time" id="config-hora-esperada" required class="w-full min-h-[48px] bg-slate-50 border border-slate-300 rounded-xl px-3.5 text-base">
+                </div>
+                <div>
+                    <label for="config-tolerancia-min" class="block text-xs font-semibold uppercase text-slate-600 mb-1">Tolerancia (min)</label>
+                    <input type="number" id="config-tolerancia-min" min="0" max="120" required class="w-full min-h-[48px] bg-slate-50 border border-slate-300 rounded-xl px-3.5 text-base">
+                </div>
+                <div class="flex justify-end gap-2.5">
+                    <button type="button" onclick="cerrarModalPuntualidad()" class="px-4 py-2.5 text-sm text-slate-600">Cancelar</button>
+                    <button type="submit" class="px-5 py-2.5 text-sm bg-emerald-600 text-white rounded-xl">Guardar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Gestión Empleados -->
+    <div id="modal-gestion-empleados" role="dialog" aria-modal="true" aria-labelledby="titulo-modal-gestion" class="fixed inset-0 z-50 hidden bg-slate-900/60 flex items-end sm:items-center justify-center p-0 sm:p-4">
+        <div class="bg-white rounded-t-3xl sm:rounded-2xl max-w-md w-full p-6 shadow-xl border border-slate-200 animate-slide-up max-h-[85vh] flex flex-col">
+            <h3 id="titulo-modal-gestion" class="text-base font-bold text-slate-900 mb-4">Gestionar Empleados</h3>
+            <div id="lista-gestion-empleados" class="divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-y-auto flex-grow bg-slate-50 p-2"></div>
+            <div class="flex justify-end pt-4">
+                <button type="button" onclick="cerrarModalGestionEmpleados()" class="px-4 py-2 text-xs font-semibold text-slate-700 bg-slate-100 rounded-xl">Cerrar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Limpiar Historial -->
+    <div id="modal-confirmacion" role="dialog" aria-modal="true" aria-labelledby="titulo-modal-confirmacion" class="fixed inset-0 z-50 hidden bg-slate-900/60 flex items-end sm:items-center justify-center p-0 sm:p-4">
+        <div class="bg-white rounded-t-3xl sm:rounded-2xl max-w-md w-full p-6 shadow-xl border border-slate-200 animate-slide-up">
+            <h3 id="titulo-modal-confirmacion" class="text-base font-bold text-slate-900 mb-2">¿Eliminar todos los registros de la nube?</h3>
+            <p class="text-xs text-slate-500 mb-4">Esta acción borrará permanentemente todo el historial sincronizado.</p>
+            <div class="flex justify-end gap-2.5">
+                <button onclick="cerrarModalConfirmacion()" class="px-4 py-2.5 text-sm text-slate-600">Cancelar</button>
+                <button onclick="confirmarLimpiarHistorial()" class="px-5 py-2.5 text-sm bg-rose-600 text-white rounded-xl">Sí, borrar todo</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast -->
+    <div id="toast-notificacion" role="status" aria-live="polite" class="fixed bottom-4 left-3 right-3 sm:left-auto sm:right-5 sm:bottom-5 z-50 transform translate-y-28 opacity-0 transition-all duration-300 pointer-events-none sm:max-w-sm bg-slate-900 text-white px-4 py-3.5 rounded-2xl shadow-xl flex items-center gap-3">
+        <div class="flex-grow min-w-0">
+            <p id="toast-titulo" class="text-xs font-bold truncate"></p>
+            <p id="toast-mensaje" class="text-[11px] text-slate-200 mt-0.5"></p>
+        </div>
+    </div>
+
+    <!-- SDK de Firebase (versión modular v11 con tus credenciales integradas) -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js";
+        import { 
+            getDatabase, ref, push, set, onValue, remove, update 
+        } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-database.js";
+
+        const firebaseConfig = {
+          apiKey: "AIzaSyDQ1o3iaz5NzcvdrLhS-jazaWESD9mZZ0k",
+          authDomain: "controlasistencia-3f1f0.firebaseapp.com",
+          databaseURL: "https://controlasistencia-3f1f0-default-rtdb.firebaseio.com",
+          projectId: "controlasistencia-3f1f0",
+          storageBucket: "controlasistencia-3f1f0.firebasestorage.app",
+          messagingSenderId: "239933807692",
+          appId: "1:239933807692:web:b29425bbd0c266a2bba8e9"
+        };
+
+        try {
+            const app = initializeApp(firebaseConfig);
+            const db = getDatabase(app);
+            
+            window.firebaseDB = { db, ref, push, set, onValue, remove, update };
+            window.dispatchEvent(new Event('firebaseReady'));
+            
+            document.getElementById('firebase-status').textContent = 'Conectado a Firebase en vivo';
+            document.getElementById('firebase-status').className = 'bg-emerald-600 text-white text-[11px] font-medium text-center py-1 px-2';
+            setTimeout(() => {
+                document.getElementById('firebase-status').style.display = 'none';
+            }, 3000);
+        } catch (error) {
+            console.error("Error al conectar Firebase:", error);
+            document.getElementById('firebase-status').textContent = 'Error de conexión con Firebase. Revisa tu configuración.';
+        }
+    </script>
+
+    <!-- Script principal de la aplicación -->
+    <script>
+        const EMPLEADOS_POR_DEFECTO = [
+            { id: 'EMP-001', nombre: 'Ana García', cargo: 'Administración' },
+            { id: 'EMP-002', nombre: 'Carlos Mendoza', cargo: 'Operaciones' }
+        ];
+        const CONFIG_POR_DEFECTO = { horaEsperada: '09:00', toleranciaMin: 5, claveAdmin: '1234' };
+
+        let empleados = [];
+        let registros = [];
+        let empleadoActivoId = '';
+        let configPuntualidad = { ...CONFIG_POR_DEFECTO };
+
+        function esc(s) {
+            return String(s ?? '').replace(/[&<>"']/g, c => ({
+                '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+            }[c]));
+        }
+
+        function obtenerFechaISO(d = new Date()) {
+            const y = d.getFullYear();
+            const m = String(d.getMonth() + 1).padStart(2, '0');
+            const dia = String(d.getDate()).padStart(2, '0');
+            return `${y}-${m}-${dia}`;
+        }
+
+        function formatearHoraHHMMSS(d) {
+            return String(d.getHours()).padStart(2, '0') + ':' +
+                   String(d.getMinutes()).padStart(2, '0') + ':' +
+                   String(d.getSeconds()).padStart(2, '0');
+        }
+
+        function formatearDuracion(ms, formatoCorto = false) {
+            if (ms < 0) ms = 0;
+            const segundos = Math.floor(ms / 1000);
+            const horas = Math.floor(segundos / 3600);
+            const minutos = Math.floor((segundos % 3600) / 60);
+            const segs = segundos % 60;
+            if (formatoCorto) {
+                return `${String(horas).padStart(2, '0')}h ${String(minutos).padStart(2, '0')}m ${String(segs).padStart(2, '0')}s`;
+            }
+            return `${horas}h ${minutos}m`;
+        }
+
+        // --- Conexión con Firebase Cloud ---
+        window.addEventListener('firebaseReady', () => {
+            const { db, ref, onValue } = window.firebaseDB;
+
+            // Escuchar empleados en vivo
+            onValue(ref(db, 'empleados'), (snapshot) => {
+                const data = snapshot.val();
+                if (data) {
+                    empleados = Object.values(data);
+                } else {
+                    EMPLEADOS_POR_DEFECTO.forEach(emp => {
+                        window.firebaseDB.set(ref(db, 'empleados/' + emp.id), emp);
+                    });
+                    empleados = [...EMPLEADOS_POR_DEFECTO];
+                }
+                if (!empleadoActivoId && empleados.length > 0) empleadoActivoId = empleados[0].id;
+                poblarSelectoresEmpleados();
+                actualizarInterfazCompleta();
+            });
+
+            // Escuchar registros en vivo
+            onValue(ref(db, 'registros'), (snapshot) => {
+                const data = snapshot.val();
+                if (data) {
+                    registros = Object.values(data).sort((a, b) => b.timestamp - a.timestamp);
+                } else {
+                    registros = [];
+                }
+                actualizarInterfazCompleta();
+            });
+
+            // Escuchar configuración en vivo
+            onValue(ref(db, 'config'), (snapshot) => {
+                const data = snapshot.val();
+                if (data) {
+                    configPuntualidad = { ...CONFIG_POR_DEFECTO, ...data };
+                } else {
+                    window.firebaseDB.set(ref(db, 'config'), CONFIG_POR_DEFECTO);
+                }
+                actualizarInterfazCompleta();
+            });
+        });
+
+        function poblarSelectoresEmpleados() {
+            const select = document.getElementById('select-empleado');
+            const filtro = document.getElementById('filtro-empleado');
+            const aviso = document.getElementById('aviso-sin-empleados');
+            const contenedor = document.getElementById('contenedor-select-empleado');
+            const filtroPrevio = filtro.value || 'TODOS';
+
+            select.innerHTML = '';
+            filtro.innerHTML = '<option value="TODOS">Todos los empleados</option>';
+
+            if (empleados.length === 0) {
+                contenedor.classList.add('hidden');
+                aviso.classList.remove('hidden');
+                empleadoActivoId = '';
+            } else {
+                contenedor.classList.remove('hidden');
+                aviso.classList.add('hidden');
+                if (!empleados.some(e => e.id === empleadoActivoId)) {
+                    empleadoActivoId = empleados[0].id;
+                }
+                empleados.forEach(e => {
+                    const txt = `${e.nombre} (${e.id})`;
+                    const opt1 = document.createElement('option');
+                    opt1.value = e.id;
+                    opt1.textContent = txt;
+                    if (e.id === empleadoActivoId) opt1.selected = true;
+                    select.appendChild(opt1);
+
+                    const opt2 = document.createElement('option');
+                    opt2.value = e.id;
+                    opt2.textContent = txt;
+                    filtro.appendChild(opt2);
+                });
+            }
+            filtro.value = filtroPrevio;
+        }
+
+        function cambiarEmpleadoActivo() {
+            empleadoActivoId = document.getElementById('select-empleado').value;
+            actualizarInterfazCompleta();
+        }
+
+        function calcularMetricasEmpleado(empId, fechaISO = obtenerFechaISO()) {
+            if (!empId) return { estadoActual: 'Fuera de turno', msTrabajados: 0, marcasDia: [] };
+
+            const marcasDia = registros
+                .filter(r => r.empleadoId === empId && r.fechaISO === fechaISO && (r.tipo === 'Entrada' || r.tipo === 'Salida'))
+                .sort((a, b) => a.timestamp - b.timestamp);
+
+            let estadoActual = 'Fuera de turno';
+            let msTrabajados = 0;
+            let inicioSegmento = null;
+
+            marcasDia.forEach(m => {
+                if (m.tipo === 'Entrada') {
+                    inicioSegmento = m.timestamp;
+                    estadoActual = 'Trabajando';
+                } else if (m.tipo === 'Salida') {
+                    if (inicioSegmento) msTrabajados += (m.timestamp - inicioSegmento);
+                    inicioSegmento = null;
+                    estadoActual = 'Fuera de turno';
+                }
+            });
+
+            if (inicioSegmento) msTrabajados += (Date.now() - inicioSegmento);
+            return { estadoActual, msTrabajados, marcasDia };
+        }
+
+        function evaluarPuntualidadTimestamp(timestamp) {
+            const fecha = new Date(timestamp);
+            const minEntrada = fecha.getHours() * 60 + fecha.getMinutes();
+            const [hEsp, mEsp] = configPuntualidad.horaEsperada.split(':').map(Number);
+            const minEsperados = hEsp * 60 + mEsp;
+            const minLimite = minEsperados + Number(configPuntualidad.toleranciaMin || 0);
+
+            if (minEntrada <= minLimite) return { esAtraso: false, etiqueta: 'A tiempo' };
+            return { esAtraso: true, etiqueta: `Atraso (+${minEntrada - minEsperados} min)` };
+        }
+
+        function registrarMarca(tipo) {
+            if (!window.firebaseDB) {
+                mostrarToast('Error', 'Firebase no está conectado', 'error');
+                return;
+            }
+            if (!empleadoActivoId) return;
+            const emp = empleados.find(e => e.id === empleadoActivoId);
+            if (!emp) return;
+
+            const metricas = calcularMetricasEmpleado(emp.id);
+            const estado = metricas.estadoActual;
+
+            if (tipo === 'Entrada' && estado !== 'Fuera de turno') return;
+            if (tipo === 'Salida' && estado === 'Fuera de turno') return;
+
+            const ahora = new Date();
+            let estadoPuntualidad = '';
+            if (tipo === 'Entrada') {
+                const yaTiene = metricas.marcasDia.some(m => m.tipo === 'Entrada');
+                estadoPuntualidad = yaTiene ? 'Reingreso' : evaluarPuntualidadTimestamp(ahora.getTime()).etiqueta;
+            }
+
+            let duracion = '—';
+            if (tipo === 'Salida') duracion = formatearDuracion(metricas.msTrabajados, false);
+
+            const regId = 'REG-' + Date.now();
+            const reg = {
+                id: regId,
+                timestamp: ahora.getTime(),
+                fechaISO: obtenerFechaISO(ahora),
+                fechaLegible: ahora.toLocaleDateString('es-ES'),
+                empleadoId: emp.id,
+                empleadoNombre: emp.nombre,
+                tipo: tipo,
+                hora: formatearHoraHHMMSS(ahora),
+                notas: document.getElementById('input-notas').value.trim(),
+                duracionTurno: duracion,
+                estadoPuntualidad: estadoPuntualidad
+            };
+
+            const { db, ref, set } = window.firebaseDB;
+            set(ref(db, 'registros/' + regId), reg).then(() => {
+                document.getElementById('input-notas').value = '';
+                mostrarToast('Registrado', `${emp.nombre} - ${tipo} (Sincronizado)`);
+            });
+        }
+
+        function actualizarRelojYTimers() {
+            const ahora = new Date();
+            document.getElementById('reloj-digital').textContent = formatearHoraHHMMSS(ahora);
+            document.getElementById('fecha-actual').textContent = ahora.toLocaleDateString('es-ES', {
+                weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+            });
+
+            const metricas = calcularMetricasEmpleado(empleadoActivoId);
+            document.getElementById('cronometro-jornada').textContent = formatearDuracion(metricas.msTrabajados, true);
+        }
+
+        function actualizarInterfazCompleta() {
+            const btnEntrada = document.getElementById('btn-entrada');
+            const textoBtnEntrada = document.getElementById('texto-btn-entrada');
+            const btnSalida = document.getElementById('btn-salida');
+            const textoEstado = document.getElementById('texto-estado');
+
+            document.getElementById('header-regla-puntualidad').textContent = `${configPuntualidad.horaEsperada} +${configPuntualidad.toleranciaMin}m`;
+            document.getElementById('resumen-regla-activa').textContent = `${configPuntualidad.horaEsperada} (+${configPuntualidad.toleranciaMin}m)`;
+
+            if (!empleadoActivoId) {
+                textoEstado.textContent = 'Sin empleado';
+                btnEntrada.disabled = true;
+                btnSalida.disabled = true;
+                actualizarResumenGlobal();
+                renderizarHistorial();
+                return;
+            }
+
+            const m = calcularMetricasEmpleado(empleadoActivoId);
+            textoEstado.textContent = m.estadoActual;
+
+            if (m.estadoActual === 'Fuera de turno') {
+                textoBtnEntrada.textContent = 'Registrar Entrada';
+                btnEntrada.disabled = false;
+                btnSalida.disabled = true;
+            } else {
+                textoBtnEntrada.textContent = 'Turno en Curso';
+                btnEntrada.disabled = true;
+                btnSalida.disabled = false;
+            }
+
+            actualizarResumenGlobal();
+            renderizarHistorial();
+        }
+
+        function actualizarResumenGlobal() {
+            const hoy = obtenerFechaISO();
+            const primeras = {};
+            registros.filter(r => r.fechaISO === hoy && r.tipo === 'Entrada').forEach(r => {
+                if (!primeras[r.empleadoId]) primeras[r.empleadoId] = r;
+            });
+
+            const lista = Object.values(primeras);
+            let aTime = 0, atrasos = 0;
+            lista.forEach(r => {
+                if (evaluarPuntualidadTimestamp(r.timestamp).esAtraso) atrasos++;
+                else aTime++;
+            });
+
+            let enTurno = 0;
+            empleados.forEach(e => {
+                if (calcularMetricasEmpleado(e.id, hoy).estadoActual !== 'Fuera de turno') enTurno++;
+            });
+
+            document.getElementById('resumen-entradas-hoy').textContent = lista.length;
+            document.getElementById('resumen-atiempo-hoy').textContent = aTime;
+            document.getElementById('resumen-atrasos-hoy').textContent = atrasos;
+            document.getElementById('resumen-activos-ahora').textContent = enTurno;
+            document.getElementById('resumen-total-plantilla').textContent = `De ${empleados.length} registrados`;
+
+            if (empleadoActivoId) {
+                const emp = empleados.find(e => e.id === empleadoActivoId);
+                const regEmp = primeras[empleadoActivoId];
+                document.getElementById('resumen-empleado-estado-texto').textContent = regEmp ? `Entrada: ${regEmp.hora}` : 'Sin ingreso hoy';
+                document.getElementById('resumen-puntualidad-empleado').textContent = regEmp ? regEmp.estadoPuntualidad : 'Empleado: Sin ingreso';
+            }
+        }
+
+        function renderizarHistorial() {
+            const filtroEmp = document.getElementById('filtro-empleado').value;
+            const filtroFec = document.getElementById('filtro-fecha').value;
+            const tbody = document.getElementById('tbody-historial');
+            const listaMovil = document.getElementById('lista-tarjetas-movil');
+            const estadoVacio = document.getElementById('estado-vacio');
+            const contador = document.getElementById('contador-registros');
+
+            let filtrados = registros.filter(r => {
+                let coincideEmp = (filtroEmp === 'TODOS' || r.empleadoId === filtroEmp);
+                let coincideFec = (!filtroFec || r.fechaISO === filtroFec);
+                return coincideEmp && coincideFec;
+            });
+
+            tbody.innerHTML = '';
+            listaMovil.innerHTML = '';
+
+            if (filtrados.length === 0) {
+                estadoVacio.classList.remove('hidden');
+                contador.textContent = '0 registros mostrados';
+                return;
+            }
+
+            estadoVacio.classList.add('hidden');
+            contador.textContent = `${filtrados.length} registro(s) mostrado(s)`;
+
+            filtrados.forEach(r => {
+                const esEntrada = r.tipo === 'Entrada';
+                const colorTipo = esEntrada ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-rose-50 text-rose-700 border-rose-200';
+                
+                // Fila Escritorio
+                const tr = document.createElement('tr');
+                tr.className = 'hover:bg-slate-50/60 transition-colors border-b border-slate-100';
+                tr.innerHTML = `
+                    <td class="py-3 px-4 font-medium text-slate-700">${esc(r.fechaLegible)}</td>
+                    <td class="py-3 px-4 font-semibold text-slate-900">${esc(r.empleadoNombre)} <span class="text-[10px] text-slate-400">(${esc(r.empleadoId)})</span></td>
+                    <td class="py-3 px-4"><span class="inline-flex px-2.5 py-0.5 rounded-full text-xs font-semibold border ${colorTipo}">${esc(r.tipo)}</span></td>
+                    <td class="py-3 px-4"><span class="font-bold text-slate-800">${esc(r.hora)}</span> ${r.estadoPuntualidad ? `<span class="block text-[11px] text-slate-500">${esc(r.estadoPuntualidad)}</span>` : ''}</td>
+                    <td class="py-3 px-4 text-slate-600 truncate max-w-[200px]">${esc(r.notas || '—')}</td>
+                    <td class="py-3 px-4 text-right font-mono text-xs text-slate-600">${esc(r.duracionTurno || '—')}</td>
+                `;
+                tbody.appendChild(tr);
+
+                // Tarjeta Móvil
+                const div = document.createElement('div');
+                div.className = 'p-3.5 space-y-1.5 bg-white';
+                div.innerHTML = `
+                    <div class="flex items-center justify-between">
+                        <span class="font-bold text-slate-900 text-xs">${esc(r.empleadoNombre)}</span>
+                        <span class="inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold border ${colorTipo}">${esc(r.tipo)}</span>
+                    </div>
+                    <div class="flex items-center justify-between text-xs text-slate-600">
+                        <span>${esc(r.fechaLegible)} — <strong>${esc(r.hora)}</strong></span>
+                        <span class="font-mono">${esc(r.duracionTurno || '')}</span>
+                    </div>
+                    ${r.estadoPuntualidad ? `<p class="text-[11px] text-slate-500">Estado: ${esc(r.estadoPuntualidad)}</p>` : ''}
+                    ${r.notas ? `<p class="text-[11px] text-slate-500 italic">Nota: ${esc(r.notas)}</p>` : ''}
+                `;
+                listaMovil.appendChild(div);
+            });
+        }
+
+        function limpiarFiltros() {
+            document.getElementById('filtro-empleado').value = 'TODOS';
+            document.getElementById('filtro-fecha').value = '';
+            renderizarHistorial();
+        }
+
+        // --- Funciones de Modales y Toast ---
+        function mostrarToast(titulo, mensaje) {
+            const toast = document.getElementById('toast-notificacion');
+            document.getElementById('toast-titulo').textContent = titulo;
+            document.getElementById('toast-mensaje').textContent = mensaje;
+            toast.classList.remove('translate-y-28', 'opacity-0');
+            setTimeout(() => {
+                toast.classList.add('translate-y-28', 'opacity-0');
+            }, 3500);
+        }
+
+        function abrirModalEmpleado() { document.getElementById('modal-empleado').classList.remove('hidden'); }
+        function cerrarModalEmpleado() { document.getElementById('modal-empleado').classList.add('hidden'); }
+
+        function guardarNuevoEmpleado(e) {
+            e.preventDefault();
+            const nombre = document.getElementById('nuevo-emp-nombre').value.trim();
+            const id = document.getElementById('nuevo-emp-id').value.trim();
+
+            if (!window.firebaseDB) return;
+            const { db, ref, set } = window.firebaseDB;
+            set(ref(db, 'empleados/' + id), { id, nombre, cargo: 'Personal' }).then(() => {
+                cerrarModalEmpleado();
+                e.target.reset();
+                mostrarToast('Éxito', `Empleado ${nombre} agregado.`);
+            });
+        }
+
+        function abrirModalGestionEmpleados() {
+            const lista = document.getElementById('lista-gestion-empleados');
+            lista.innerHTML = '';
+            empleados.forEach(e => {
+                const item = document.createElement('div');
+                item.className = 'flex items-center justify-between p-2 bg-white rounded-lg mb-1 shadow-sm';
+                item.innerHTML = `
+                    <div>
+                        <p class="font-bold text-xs text-slate-800">${esc(e.nombre)}</p>
+                        <p class="text-[10px] text-slate-500">ID: ${esc(e.id)}</p>
+                    </div>
+                    <button onclick="eliminarEmpleado('${e.id}')" class="px-2 py-1 text-[11px] font-semibold text-rose-600 bg-rose-50 rounded">Eliminar</button>
+                `;
+                lista.appendChild(item);
+            });
+            document.getElementById('modal-gestion-empleados').classList.remove('hidden');
+        }
+        function cerrarModalGestionEmpleados() { document.getElementById('modal-gestion-empleados').classList.add('hidden'); }
+
+        function eliminarEmpleado(id) {
+            if (!window.firebaseDB) return;
+            const { db, ref, remove } = window.firebaseDB;
+            remove(ref(db, 'empleados/' + id)).then(() => {
+                abrirModalGestionEmpleados();
+                mostrarToast('Eliminado', 'Empleado removido de la nube.');
+            });
+        }
+
+        function abrirModalPuntualidad() {
+            document.getElementById('modal-puntualidad').classList.remove('hidden');
+            document.getElementById('form-verificar-clave').classList.remove('hidden');
+            document.getElementById('form-config-puntualidad').classList.add('hidden');
+            document.getElementById('input-clave-admin').value = '';
+            document.getElementById('
